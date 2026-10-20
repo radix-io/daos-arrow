@@ -9,9 +9,23 @@
 
 cd $PBS_O_WORKDIR
 
+# arrow and parquet libraries installed from source
+source ${HOME}/src/arrow/cpp/arrow-env.sh
+
 export DAOS_POOL=radix-io
 export DAOS_CONT=daos-s3-demo
 
-launch-dfuse.sh ${DAOS_POOL}:${DAOS_CONT}
-mpiexec -np 4 ./parallel-write-with-mpi /tmp/${DAOS_POOL}/${DAOS_CONT}/
+# Native libdfs path (PLAN.md): no dfuse mount needed -- DaosFileSystem
+# talks to DAOS directly via daos_connect/dfs_connect. The URI's path
+# component becomes the base dir both programs write/read "data/" under.
+DAOS_URI=daos://${DAOS_POOL}/${DAOS_CONT}/daos-s3-demo-run
+
+echo "===     container state before: "
+daos container list-objects ${DAOS_POOL} ${DAOS_CONT}
+echo "===     WRITING:"
+mpiexec -np 4 ./parallel-write-with-mpi ${DAOS_URI}
+echo "===     container state after"
+daos container list-objects ${DAOS_POOL} ${DAOS_CONT}
+echo "===     READING:"
+./ex5-unified-reading ${DAOS_URI}
 
