@@ -27,5 +27,5 @@ mpiexec -np 4 ./parallel-write-with-mpi ${DAOS_URI}
 echo "===     container state after"
 daos container list-objects ${DAOS_POOL} ${DAOS_CONT}
 echo "===     READING:"
-./ex5-unified-reading ${DAOS_URI}
+./unified-reading ${DAOS_URI}
 
