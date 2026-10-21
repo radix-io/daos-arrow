@@ -145,26 +145,35 @@ arrow::Status DaosFileSystem::CollectFileInfo(const std::string& dir_path,
     return DfsError(rc, "opendir '" + dir_path + "'");
   }
 
+  // dfs_readdirplus fetches stat for every entry in the same RPC, reusing
+  // the already-open directory handle instead of a separate dfs_lookup (and
+  // its per-component path walk) for each child -- see daos-cpp-dfs.h's
+  // readdirplus_all() and PLAN.md's optimization #1.
   std::vector<arrow::fs::FileInfo> children;
-  rc = daos::fs::readdir_all(mount_, dir.get(), [&](const struct dirent& de) {
-    std::string name(de.d_name);
-    std::string child_path =
-        dir_path.empty() ? name : fsint::ConcatAbstractPath(dir_path, name);
-    children.push_back(arrow::fs::FileInfo(child_path));
-  });
+  rc = daos::fs::readdirplus_all(
+      mount_, dir.get(), [&](const struct dirent& de, const struct stat& st) {
+        std::string name(de.d_name);
+        std::string child_path =
+            dir_path.empty() ? name : fsint::ConcatAbstractPath(dir_path, name);
+        arrow::fs::FileInfo info(child_path);
+        info.set_type(ModeToFileType(st.st_mode));
+        info.set_mtime(StatToTimePoint(st));
+        if (info.type() == arrow::fs::FileType::File) {
+          info.set_size(st.st_size);
+        }
+        children.push_back(std::move(info));
+      });
   if (rc != 0) {
-    return DfsError(rc, "readdir '" + dir_path + "'");
+    return DfsError(rc, "readdirplus '" + dir_path + "'");
   }
 
+  // Recurse only after the readdirplus anchor loop above has fully
+  // completed -- not inside the callback -- so we never hold the parent
+  // directory's handle open across nested recursive RPCs.
   for (auto& child : children) {
-    // dfs_readdir only gives us d_name; stat each entry individually to get
-    // type/size/mtime. (A readdirplus-based version could fetch stat for
-    // free per entry -- left as a possible follow-up, not required for the
-    // demo; see PLAN.md.)
-    ARROW_ASSIGN_OR_RAISE(auto info, StatPath(child.path()));
-    out->push_back(info);
-    if (info.type() == arrow::fs::FileType::Directory && max_recursion > 0) {
-      RETURN_NOT_OK(CollectFileInfo(info.path(), max_recursion - 1, out));
+    out->push_back(child);
+    if (child.type() == arrow::fs::FileType::Directory && max_recursion > 0) {
+      RETURN_NOT_OK(CollectFileInfo(child.path(), max_recursion - 1, out));
     }
   }
   return arrow::Status::OK();

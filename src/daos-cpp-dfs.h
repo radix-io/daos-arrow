@@ -132,6 +132,20 @@ class Mount {
 		return rc;
 	}
 
+	/**
+	 * Resolve a single name relative to an already-open parent, skipping
+	 * the per-component path walk dfs_lookup() does internally. Same
+	 * O_RDWR-on-parent rule as lookup() above applies to `flags` here --
+	 * see the comment on lookup().
+	 */
+	int lookup_rel(dfs_obj_t *parent, const char *name, int flags, Obj *out,
+		       struct stat *stbuf = nullptr) const {
+		dfs_obj_t *raw = nullptr;
+		int rc = dfs_lookup_rel(dfs_, parent, name, flags, &raw, nullptr, stbuf);
+		if (rc == 0) out->reset(raw);
+		return rc;
+	}
+
 	int open(dfs_obj_t *parent, const char *name, mode_t mode, int flags,
 		 Obj *out) const {
 		dfs_obj_t *raw = nullptr;
@@ -210,6 +224,27 @@ int readdir_all(const Mount& m, dfs_obj_t *dir, Fn&& fn, uint32_t batch = 64) {
 		int rc = dfs_readdir(m.get(), dir, &anchor, &nr, ents.data());
 		if (rc != 0) return rc;
 		for (uint32_t i = 0; i < nr; i++) fn(ents[i]);
+	}
+	return 0;
+}
+
+/**
+ * Like readdir_all(), but fetches struct stat for every entry in the same
+ * RPC (dfs_readdirplus() reuses the already-open parent handle internally
+ * instead of re-walking each child's path component-by-component the way a
+ * separate dfs_lookup() per entry would). Calls fn(const dirent&, const
+ * stat&) per entry; returns errno (0 on full enumeration).
+ */
+template <typename Fn>
+int readdirplus_all(const Mount& m, dfs_obj_t *dir, Fn&& fn, uint32_t batch = 64) {
+	daos_anchor_t anchor = {};
+	std::vector<struct dirent> ents(batch);
+	std::vector<struct stat> stats(batch);
+	while (!daos_anchor_is_eof(&anchor)) {
+		uint32_t nr = batch;
+		int rc = dfs_readdirplus(m.get(), dir, &anchor, &nr, ents.data(), stats.data());
+		if (rc != 0) return rc;
+		for (uint32_t i = 0; i < nr; i++) fn(ents[i], stats[i]);
 	}
 	return 0;
 }
