@@ -1,0 +1,7 @@
+parallel-write-with-mpi
+src/daos_arrow_fs.o
+tests/test-daos-filesystem
+tests/test-daos-filesystem-recursive
+tests/test-dfs-roundtrip
+tests/test-dfs-sanity
+unified-reading
