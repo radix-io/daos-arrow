@@ -22,7 +22,7 @@
  * Parquet can abstract multiple files under a "dataset" abstraction
  *
  * `prefix` is a daos://pool/container/[path] URI, matching what
- * parallel-write-with-mpi.cc wrote to (see PLAN.md). A bare local path (no
+ * parallel-write-with-mpi.cc wrote to. A bare local path (no
  * "daos://" scheme) falls back to LocalFileSystem via
  * FileSystemFromUriOrPath, so this can still be exercised without DAOS.
  */
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        auto status = readData(rank, nprocs, argv[1]);
+    auto status = readData(rank, nprocs, argv[1]);
     if (!status.ok()) {
         std::cerr << "Error: "<< status.ToString() << std::endl;
         MPI_Abort(MPI_COMM_WORLD, 1);

@@ -18,10 +18,10 @@
  * consider an MPI job that writes its data to Parquet.  we can shard to one
  * file per MPI rank
  *
- * `prefix` is now a daos://pool/container/[path] URI (see PLAN.md). A bare
+ * `prefix` is a daos://pool/container/[path] URI. A bare
  * local path (no "daos://" scheme) still works for local testing: it falls
- * back to LocalFileSystem via FileSystemFromUriOrPath, so this program can
- * be exercised without DAOS by passing e.g. "./" as before.
+ * back to LocalFileSystem via FileSystemFromUriOrPath: this program can
+ * be exercised without DAOS by passing e.g. "./"
  */
 
 arrow::Status writeShard(int rank, std::shared_ptr<arrow::RecordBatch> batch, const std::string prefix) {

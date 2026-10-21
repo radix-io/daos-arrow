@@ -1,5 +1,3 @@
-ARROW=${HOME}/soft/arrow-cpp
-
 CXX=g++
 MPICXX=mpicxx
 CXXFLAGS=-Wall -g --std=c++20
@@ -7,7 +5,6 @@ CXXFLAGS=-Wall -g --std=c++20
 CPPFLAGS=$(shell pkg-config --cflags arrow parquet arrow-dataset arrow-compute)
 LDLIBS=$(shell pkg-config --libs arrow parquet arrow-dataset arrow-compute)
 
-# DAOS: no pkg-config file shipped, so hand-specify against system paths.
 DAOS_LDLIBS=-ldfs -lduns -ldaos -luuid
 
 SRC=src
@@ -16,11 +13,7 @@ TESTS=tests
 INC=-I$(SRC)
 
 all: parallel-write-with-mpi unified-reading
-# NB: named daos_arrow_fs.{h,cc}, NOT daos_fs.{h,cc} -- the system DAOS
-# headers already ship /usr/include/daos_fs.h, and with -I$(SRC) in the
-# build, a local daos_fs.h would shadow it (confirmed: g++ -H showed the
-# local stub satisfying #include <daos_fs.h> inside daos-cpp-dfs.h, which
-# then fails to find any dfs_* declarations at all).
+
 $(SRC)/daos_arrow_fs.o: $(SRC)/daos_arrow_fs.cc $(SRC)/daos_arrow_fs.h $(SRC)/daos-cpp-dfs.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 

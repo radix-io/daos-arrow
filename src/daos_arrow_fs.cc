@@ -23,7 +23,7 @@ arrow::Status DfsError(int rc, const std::string& context) {
 // dfs_lookup/dfs_open require an absolute ("/"-rooted) path; Arrow's
 // FileSystem paths are relative (no leading slash). Normalize + reject
 // anything that looks like an actual daos:// URI slipping in here (callers
-// should go through FileSystemFromUri for that).
+// should go through arrow's FileSystemFromUri for that).
 arrow::Result<std::string> ToDfsPath(const std::string& path) {
   if (fsint::IsLikelyUri(path)) {
     return arrow::Status::Invalid("Expected a daos filesystem path, got a URI: '", path,
@@ -471,12 +471,7 @@ arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> DaosFileSystemFactory(
     std::string* out_path) {
   // daos://pool/container/relpath -- host is the pool, first path segment
   // the container, the rest the in-container path. We use Arrow's own
-  // Uri parsing (not duns_resolve_path) for *this* scheme so we don't
-  // require the DAOS UNS/xattr machinery just to split a pool/cont/path
-  // triple apart; duns_resolve_path remains the right tool for resolving a
-  // path *already registered* in the UNS (e.g. a dfuse mount point),
-  // which is a different use case than a bare daos:// URI naming a
-  // pool+container directly. See PLAN.md for the tradeoff.
+  // Uri parsing (not duns_resolve_path) for this scheme 
   std::string pool = uri.host();
   std::string rest = uri.path();  // leading '/', e.g. "/container/a/b"
   rest = fsint::RemoveLeadingSlash(rest).data();
