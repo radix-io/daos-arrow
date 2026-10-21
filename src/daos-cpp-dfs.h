@@ -145,14 +145,30 @@ class Mount {
 		return rc;
 	}
 
+	/**
+	 * `cid`/`chunk_size` are only consulted by DAOS on *create* (i.e. when
+	 * O_CREAT causes a new object to be made) and silently ignored when
+	 * opening an existing one -- see dfs_open()'s doc comment in
+	 * daos_fs.h. Pass 0 for either to get the DAOS default (MAX_RW oclass,
+	 * 1 MiB chunk size).
+	 */
 	int open(dfs_obj_t *parent, const char *name, mode_t mode, int flags,
-		 Obj *out) const {
+		 Obj *out, daos_oclass_id_t cid = 0, daos_size_t chunk_size = 0) const {
 		dfs_obj_t *raw = nullptr;
-		int rc = dfs_open(dfs_, parent, name, mode, flags,
-				  0 /*default oclass*/, 0 /*default chunk*/,
+		int rc = dfs_open(dfs_, parent, name, mode, flags, cid, chunk_size,
 				  nullptr /*not a symlink*/, &raw);
 		if (rc == 0) out->reset(raw);
 		return rc;
+	}
+
+	/**
+	 * Translate a "file:single" / "file:max" (etc. -- see daos_fs.h) hint
+	 * into an object class id suitable for the `cid` argument to open()
+	 * above. Not cached: cheap, local call (no RPC), so there is no need
+	 * to resolve it more than once per DaosFileSystem construction either.
+	 */
+	int suggest_oclass(const char *hint, daos_oclass_id_t *cid) const {
+		return dfs_suggest_oclass(dfs_, hint, cid);
 	}
 
 	int mkdir(dfs_obj_t *parent, const char *name, mode_t mode = 0755) const {
@@ -173,6 +189,12 @@ class Mount {
 	}
 	int get_size(dfs_obj_t *obj, daos_size_t *size) const {
 		return dfs_get_size(dfs_, obj, size);
+	}
+	/** dfs_get_chunk_size() doesn't take a dfs_t* -- it reads state cached
+	 * on the object handle from open/create time -- but grouped here with
+	 * the other object-attribute getters for discoverability. */
+	int get_chunk_size(dfs_obj_t *obj, daos_size_t *chunk_size) const {
+		return dfs_get_chunk_size(obj, chunk_size);
 	}
 
 	/* --- I/O: hides the d_iov_t/d_sg_list_t setup --- */

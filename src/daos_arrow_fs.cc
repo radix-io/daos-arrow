@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 #include <arrow/buffer.h>
@@ -49,6 +50,30 @@ arrow::fs::TimePoint StatToTimePoint(const struct stat& st) {
 
 }  // namespace
 
+// ---- DaosFileSystemOptions ----
+
+arrow::Result<DaosFileSystemOptions> DaosFileSystemOptions::FromUri(
+    const arrow::util::Uri& uri) {
+  DaosFileSystemOptions options;
+  ARROW_ASSIGN_OR_RAISE(auto items, uri.query_items());
+  for (const auto& [key, value] : items) {
+    if (key == "oclass") {
+      options.oclass_hint = value;
+    } else if (key == "chunk_size") {
+      try {
+        size_t consumed = 0;
+        long long parsed = std::stoll(value, &consumed);
+        if (consumed != value.size() || parsed < 0) throw std::invalid_argument(value);
+        options.chunk_size = static_cast<daos_size_t>(parsed);
+      } catch (const std::exception&) {
+        return arrow::Status::Invalid("Invalid chunk_size in daos:// URI: '", value, "'");
+      }
+    }
+    // Unrecognized keys are ignored (forward-compatible), per the header comment.
+  }
+  return options;
+}
+
 // ---- construction / lifecycle ----
 
 std::shared_ptr<daos::fs::Library> DaosFileSystem::GetLibrary() {
@@ -57,12 +82,16 @@ std::shared_ptr<daos::fs::Library> DaosFileSystem::GetLibrary() {
 }
 
 DaosFileSystem::DaosFileSystem(std::string pool, std::string container,
+                               const DaosFileSystemOptions& options,
                                const arrow::io::IOContext& io_context)
-    : arrow::fs::FileSystem(io_context), pool_(std::move(pool)), container_(std::move(container)) {}
+    : arrow::fs::FileSystem(io_context),
+      pool_(std::move(pool)),
+      container_(std::move(container)),
+      options_(options) {}
 
 arrow::Result<std::shared_ptr<DaosFileSystem>> DaosFileSystem::Make(
     const std::string& pool, const std::string& cont,
-    const arrow::io::IOContext& io_context) {
+    const DaosFileSystemOptions& options, const arrow::io::IOContext& io_context) {
   auto lib = GetLibrary();
   if (lib->rc() != 0) {
     return DfsError(lib->rc(), "dfs_init");
@@ -72,13 +101,24 @@ arrow::Result<std::shared_ptr<DaosFileSystem>> DaosFileSystem::Make(
   // workaround (same one used for other private-constructor FileSystems
   // upstream, e.g. S3FileSystem::Make).
   struct MakeableDaosFileSystem : public DaosFileSystem {
-    MakeableDaosFileSystem(std::string p, std::string c, const arrow::io::IOContext& ctx)
-        : DaosFileSystem(std::move(p), std::move(c), ctx) {}
+    MakeableDaosFileSystem(std::string p, std::string c, const DaosFileSystemOptions& o,
+                           const arrow::io::IOContext& ctx)
+        : DaosFileSystem(std::move(p), std::move(c), o, ctx) {}
   };
-  auto fs = std::make_shared<MakeableDaosFileSystem>(pool, cont, io_context);
+  auto fs = std::make_shared<MakeableDaosFileSystem>(pool, cont, options, io_context);
   int rc = fs->mount_.connect(pool.c_str(), cont.c_str(), O_RDWR);
   if (rc != 0) {
     return DfsError(rc, "dfs_connect(pool=" + pool + ", cont=" + cont + ")");
+  }
+  // dfs_suggest_oclass needs a live dfs_t, so the hint can only be resolved
+  // post-connect; it overrides options_.file_oclass once resolved.
+  if (!fs->options_.oclass_hint.empty()) {
+    daos_oclass_id_t cid = 0;
+    rc = fs->mount_.suggest_oclass(fs->options_.oclass_hint.c_str(), &cid);
+    if (rc != 0) {
+      return DfsError(rc, "dfs_suggest_oclass('" + fs->options_.oclass_hint + "')");
+    }
+    fs->options_.file_oclass = cid;
   }
   return fs;
 }
@@ -86,7 +126,7 @@ arrow::Result<std::shared_ptr<DaosFileSystem>> DaosFileSystem::Make(
 bool DaosFileSystem::Equals(const arrow::fs::FileSystem& other) const {
   if (other.type_name() != type_name()) return false;
   const auto& o = ::arrow::internal::checked_cast<const DaosFileSystem&>(other);
-  return pool_ == o.pool_ && container_ == o.container_;
+  return pool_ == o.pool_ && container_ == o.container_ && options_.Equals(o.options_);
 }
 
 // ---- path resolution helpers ----
@@ -448,8 +488,12 @@ arrow::Result<std::shared_ptr<arrow::io::OutputStream>> DaosFileSystem::OpenOutp
     return arrow::Status::Invalid("OpenOutputStream: '", path, "' is the root directory");
   }
   daos::fs::Obj obj;
+  // file_oclass/chunk_size are consulted by DAOS only on create (which
+  // O_TRUNC|O_CREAT always is here, since we never reuse an existing
+  // object's layout) -- see DaosFileSystemOptions's header comment.
   int rc = mount_.open(parent.get(), leaf.c_str(), S_IFREG | 0644,
-                       O_CREAT | O_TRUNC | O_RDWR, &obj);
+                       O_CREAT | O_TRUNC | O_RDWR, &obj, options_.file_oclass,
+                       options_.chunk_size);
   if (rc != 0) return DfsError(rc, "open '" + path + "' for write");
   return std::make_shared<DaosOutputStream>(&mount_, std::move(obj), path, /*start_pos=*/0);
 }
@@ -462,7 +506,12 @@ arrow::Result<std::shared_ptr<arrow::io::OutputStream>> DaosFileSystem::OpenAppe
     return arrow::Status::Invalid("OpenAppendStream: '", path, "' is the root directory");
   }
   daos::fs::Obj obj;
-  int rc = mount_.open(parent.get(), leaf.c_str(), S_IFREG | 0644, O_CREAT | O_RDWR, &obj);
+  // Unlike OpenOutputStream, this may be opening an *existing* file (no
+  // O_TRUNC) -- file_oclass/chunk_size are then silently ignored by DAOS,
+  // which is the correct behavior: an existing object's layout can't be
+  // changed by reopening it.
+  int rc = mount_.open(parent.get(), leaf.c_str(), S_IFREG | 0644, O_CREAT | O_RDWR, &obj,
+                       options_.file_oclass, options_.chunk_size);
   if (rc != 0) return DfsError(rc, "open '" + path + "' for append");
   daos_size_t size = 0;
   rc = mount_.get_size(obj.get(), &size);
@@ -492,7 +541,8 @@ arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> DaosFileSystemFactory(
                                   uri.ToString());
   }
   if (out_path != nullptr) *out_path = relpath;
-  return DaosFileSystem::Make(pool, container, io_context);
+  ARROW_ASSIGN_OR_RAISE(auto options, DaosFileSystemOptions::FromUri(uri));
+  return DaosFileSystem::Make(pool, container, options, io_context);
 }
 
 arrow::fs::FileSystemRegistrar kDaosFileSystemModule{

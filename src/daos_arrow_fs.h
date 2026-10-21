@@ -9,6 +9,7 @@
  * One DaosFileSystem instance == one mounted (pool, container) pair.
  */
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -18,9 +19,49 @@
 #include <arrow/result.h>
 #include <arrow/status.h>
 
+#include <daos_obj_class.h>  // daos_oclass_id_t
+
 #include "daos-cpp-dfs.h"
 
+namespace arrow::util {
+class Uri;
+}  // namespace arrow::util
+
 namespace daos_arrow {
+
+/// \brief Layout knobs for newly-created files, consulted by DAOS only at
+/// object-create time (dfs_open with O_CREAT); both are no-ops when opening
+/// an existing file. No other Arrow filesystem backend has an equivalent --
+/// see PLAN.md optimization #3.
+struct DaosFileSystemOptions {
+  /// DAOS object class for new files (0 = DAOS default, MAX_RW). Prefer
+  /// `oclass_hint` below over setting this directly unless you already know
+  /// the numeric daos_oclass_id_t you want.
+  daos_oclass_id_t file_oclass = 0;
+
+  /// Chunk size (bytes) for new files' backing array object (0 = DAOS
+  /// default, 1 MiB -- also Parquet's default data page size, so files
+  /// written in large pages may benefit from a larger chunk size here).
+  daos_size_t chunk_size = 0;
+
+  /// A dfs_suggest_oclass() hint such as "file:single" or "file:max" (see
+  /// daos_fs.h). When non-empty, resolved once in DaosFileSystem::Make() and
+  /// used in place of `file_oclass`; leave empty to use `file_oclass` as-is
+  /// (which defaults to 0, i.e. no override).
+  std::string oclass_hint;
+
+  static DaosFileSystemOptions Defaults() { return DaosFileSystemOptions(); }
+
+  bool Equals(const DaosFileSystemOptions& other) const {
+    return file_oclass == other.file_oclass && chunk_size == other.chunk_size &&
+           oclass_hint == other.oclass_hint;
+  }
+
+  /// Parse "?oclass=file:single&chunk_size=4194304" query parameters off a
+  /// daos:// URI. Unrecognized query keys are ignored (forward-compatible
+  /// with URIs built for a later version of this backend).
+  static arrow::Result<DaosFileSystemOptions> FromUri(const arrow::util::Uri& uri);
+};
 
 /// \brief A FileSystem implementation accessing a DAOS POSIX container via libdfs.
 class DaosFileSystem : public arrow::fs::FileSystem {
@@ -33,6 +74,7 @@ class DaosFileSystem : public arrow::fs::FileSystem {
   /// a half-constructed object.
   static arrow::Result<std::shared_ptr<DaosFileSystem>> Make(
       const std::string& pool, const std::string& cont,
+      const DaosFileSystemOptions& options = DaosFileSystemOptions::Defaults(),
       const arrow::io::IOContext& io_context = arrow::io::default_io_context());
 
   std::string type_name() const override { return "daos"; }
@@ -74,9 +116,11 @@ class DaosFileSystem : public arrow::fs::FileSystem {
 
   const std::string& pool() const { return pool_; }
   const std::string& container() const { return container_; }
+  const DaosFileSystemOptions& options() const { return options_; }
 
  protected:
   explicit DaosFileSystem(std::string pool, std::string container,
+                          const DaosFileSystemOptions& options,
                           const arrow::io::IOContext& io_context);
 
  private:
@@ -97,6 +141,7 @@ class DaosFileSystem : public arrow::fs::FileSystem {
 
   std::string pool_;
   std::string container_;
+  DaosFileSystemOptions options_;
   daos::fs::Mount mount_;
 
   // dfs_init()/dfs_fini() must bracket all dfs_connect()/dfs_disconnect()

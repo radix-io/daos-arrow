@@ -36,11 +36,15 @@ $(TESTS)/test-daos-filesystem: $(TESTS)/test-daos-filesystem.cc $(SRC)/daos_arro
 $(TESTS)/test-daos-filesystem-recursive: $(TESTS)/test-daos-filesystem-recursive.cc $(SRC)/daos_arrow_fs.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(INC) -o $@ $< $(SRC)/daos_arrow_fs.o $(LDLIBS) $(DAOS_LDLIBS)
 
+$(TESTS)/test-daos-filesystem-options: $(TESTS)/test-daos-filesystem-options.cc $(SRC)/daos_arrow_fs.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(INC) -o $@ $< $(SRC)/daos_arrow_fs.o $(LDLIBS) $(DAOS_LDLIBS)
+
 .PHONY: tests
-tests: $(TESTS)/test-dfs-sanity $(TESTS)/test-dfs-roundtrip $(TESTS)/test-daos-filesystem $(TESTS)/test-daos-filesystem-recursive
+tests: $(TESTS)/test-dfs-sanity $(TESTS)/test-dfs-roundtrip $(TESTS)/test-daos-filesystem $(TESTS)/test-daos-filesystem-recursive $(TESTS)/test-daos-filesystem-options
 
 .PHONY: clean
 clean:
 	rm -f $(SRC)/daos_arrow_fs.o parallel-write-with-mpi unified-reading \
 	      $(TESTS)/test-dfs-sanity $(TESTS)/test-dfs-roundtrip \
-	      $(TESTS)/test-daos-filesystem $(TESTS)/test-daos-filesystem-recursive
+	      $(TESTS)/test-daos-filesystem $(TESTS)/test-daos-filesystem-recursive \
+	      $(TESTS)/test-daos-filesystem-options
