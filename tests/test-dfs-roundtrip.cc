@@ -1,11 +1,10 @@
 /*
- * Step 2 round-trip test (PLAN.md "Incremental build/verify order"):
  * exercises daos-cpp-dfs.h's Mount wrapper directly -- mkdir, open-for-write,
  * write_at, get_size, lookup-for-read, read_at, readdir_all, and the ENOENT
- * error path -- against the real radix-io/daos-s3-demo pool+container.
+ * error path -- against the real radix-io/daos-arrow-demo pool+container.
  *
  * This is also where the "lookup parent O_RDONLY then try to create a child
- * under it -> EPERM" bug surfaced during plan execution; see the big
+ * under it -> EPERM" bug surfaced; see the big
  * comment on daos::fs::Mount::lookup in daos-cpp-dfs.h. `lookup(dir)` below
  * is O_RDWR for that reason.
  *
@@ -32,7 +31,7 @@ int main() {
     CHECK(lib.rc(), "dfs_init");
 
     daos::fs::Mount m;
-    CHECK(m.connect("radix-io", "daos-s3-demo", O_RDWR), "dfs_connect");
+    CHECK(m.connect("radix-io", "daos-arrow-demo", O_RDWR), "dfs_connect");
 
     // mkdir the test dir at root (ignore EEXIST from a prior run)
     int rc = m.mkdir(nullptr, kTestDirName, 0755);

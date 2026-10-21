@@ -1,8 +1,8 @@
 /*
  * Targeted test for GetFileInfo(FileSelector{recursive=true}) over nested
- * subdirectories -- PLAN.md calls this "the most novel piece" (it's what
+ * subdirectories -- it's what
  * FileSystemDatasetFactory uses to discover MPI-rank shards under data/,
- * and the thing CollectFileInfo's recursion in daos_arrow_fs.cc exists for).
+ * and the thing for which CollectFileInfo's recursion in daos_arrow_fs.cc exists.
  * test-daos-filesystem.cc only exercises a single flat file, which never
  * takes the recursive branch -- this test specifically does.
  *
@@ -15,7 +15,7 @@
 int main() {
     std::string out_path;
     auto result = arrow::fs::FileSystemFromUri(
-        "daos://radix-io/daos-s3-demo/claude-plan-test-recursive", &out_path);
+        "daos://radix-io/daos-arrow-demo/claude-plan-test-recursive", &out_path);
     if (!result.ok()) {
         std::cerr << "FileSystemFromUri failed: " << result.status().ToString() << std::endl;
         return 1;

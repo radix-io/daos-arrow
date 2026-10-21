@@ -2,7 +2,7 @@
 #PBS -l select=1
 #PBS -A radix-io
 #PBS -l walltime=00:15:00
-#PBS -N daos-s3-demo
+#PBS -N daos-arrow-demo
 #PBS -k doe
 #PBS -j oe
 #PBS -l filesystems=flare:daos_user_fs
@@ -13,12 +13,12 @@ cd $PBS_O_WORKDIR
 source ${HOME}/src/arrow/cpp/arrow-env.sh
 
 export DAOS_POOL=radix-io
-export DAOS_CONT=daos-s3-demo
+export DAOS_CONT=daos-arrow-demo
 
-# Native libdfs path (PLAN.md): no dfuse mount needed -- DaosFileSystem
+# Native libdfs path: no dfuse mount needed -- DaosFileSystem
 # talks to DAOS directly via daos_connect/dfs_connect. The URI's path
 # component becomes the base dir both programs write/read "data/" under.
-DAOS_URI=daos://${DAOS_POOL}/${DAOS_CONT}/daos-s3-demo-run
+DAOS_URI=daos://${DAOS_POOL}/${DAOS_CONT}/daos-arrow-demo-run
 
 echo "===     container state before: "
 daos container list-objects ${DAOS_POOL} ${DAOS_CONT}

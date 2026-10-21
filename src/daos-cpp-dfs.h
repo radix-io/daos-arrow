@@ -109,20 +109,19 @@ class Mount {
 	/* --- path ops; all return errno --- */
 
 	/**
-	 * IMPORTANT: `flags` here is not just an access check on the looked-up
-	 * object -- it sets the DAOS object open mode (DAOS_OO_RO vs DAOS_OO_RW,
-	 * see get_daos_obj_mode() in dfs_internal.h) that server-side enforcement
-	 * checks on *every subsequent mutation through this handle*. Concretely:
-	 * if you `lookup(dir, O_RDONLY)` and then `open(dir.get(), "f",
+	 * A NOTE about DAOS object permissions: `flags` here is not just an
+	 * access check on the looked-up object -- it sets the DAOS object open
+	 * mode (DAOS_OO_RO vs DAOS_OO_RW, see get_daos_obj_mode() in
+	 * dfs_internal.h) that server-side enforcement checks on *every
+	 * subsequent mutation through this handle*. Concretely: if you
+	 * `lookup(dir, O_RDONLY)` and then `open(dir.get(), "f",
 	 * O_CREAT|O_RDWR)` a child under it, the create fails with EPERM
-	 * (DER_NO_PERM, logged server-side as "object opc N is opened with mode
-	 * 0x2") -- *not* because the file couldn't be created, but because the
-	 * *parent directory handle* was opened read-only. Confirmed against the
-	 * live radix-io/daos-s3-demo container: identical code with the parent
-	 * looked up O_RDWR instead of O_RDONLY succeeds. Any parent object you
-	 * intend to create/remove/rename children under must be looked up (or
-	 * opened) O_RDWR, even though the parent object itself isn't being
-	 * written to directly.
+	 * (DER_NO_PERM, logged server-side as "object opc N is opened with
+	 * mode 0x2") -- *not* because the file couldn't be created, but
+	 * because the *parent directory handle* was opened read-only. Any
+	 * parent object you intend to create/remove/rename children under must
+	 * be looked up (or opened) O_RDWR, even though the parent object
+	 * itself isn't being written to directly.
 	 */
 	int lookup(const std::string& path, int flags, Obj *out,
 		   struct stat *stbuf = nullptr) const {

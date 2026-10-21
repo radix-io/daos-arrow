@@ -1,7 +1,6 @@
 /*
- * Step 1 sanity check (PLAN.md "Incremental build/verify order"): exercises
- * daos-cpp-dfs.h directly (no Arrow involved) against the real
- * radix-io/daos-s3-demo pool+container -- dfs_init, dfs_connect, dfs_lookup
+ * exercises daos-cpp-dfs.h directly (no Arrow involved) against the real
+ * radix-io/daos-arrow-demo pool+container -- dfs_init, dfs_connect, dfs_lookup
  * of the root. Confirms the libdfs calls work in isolation before wiring
  * into the Arrow FileSystem backend. Run from a login node or compute node;
  * read-only, makes no changes to the container.

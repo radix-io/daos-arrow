@@ -1,11 +1,10 @@
 /*
- * Steps 2 and 4 verification (PLAN.md "Incremental build/verify order"):
  * exercises the real DaosFileSystem through Arrow's public FileSystem
  * interface (not daos-cpp-dfs.h directly) against the live
- * radix-io/daos-s3-demo pool+container -- FileSystemFromUri registration,
+ * daos pool+container -- FileSystemFromUri registration,
  * CreateDir, OpenOutputStream/Write/Close, GetFileInfo (single path and
  * recursive FileSelector -- the latter is what
- * arrow::dataset::FileSystemDatasetFactory relies on in ex5-unified-reading.cc),
+ * arrow::dataset::FileSystemDatasetFactory relies on in unified-reading.cc example),
  * OpenInputFile/Read round-trip, Move, CopyFile, DeleteFile, and the
  * NotFound (not error) semantics for a missing path.
  *
@@ -23,7 +22,7 @@ int main() {
     // 1. Connect via FileSystemFromUri (registrar path)
     std::string out_path;
     auto result = arrow::fs::FileSystemFromUri(
-        "daos://radix-io/daos-s3-demo/claude-plan-test-fs", &out_path);
+        "daos://radix-io/daos-arrow-demo/claude-plan-test-fs", &out_path);
     if (!result.ok()) {
         std::cerr << "FileSystemFromUri failed: " << result.status().ToString() << std::endl;
         return 1;
